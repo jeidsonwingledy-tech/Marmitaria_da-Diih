@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // Permite leitura e escrita de imagens para todos (necessário para o upload funcionar sem login)
+      allow read, write: if true;
+    }
+  }
+}
