@@ -36,6 +36,18 @@ const Admin = () => {
     updateOrderStatus
   } = useStore();
 
+  // --- DASHBOARD STATS ---
+  const activeOrders = orders.filter(o => !['completed', 'cancelled'].includes(o.status));
+  const completedToday = orders.filter(o => {
+    if (o.status !== 'completed') return false;
+    try {
+      const date = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+      return date.toDateString() === new Date().toDateString();
+    } catch { return false; }
+  });
+  const revenueToday = completedToday.reduce((acc, o) => acc + (Number(o.total) || 0), 0);
+  const pendingOrders = orders.filter(o => o.status === 'pending');
+
   const [isAuthenticated, setIsAuthenticated] = useState(isAdminMode);
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'categories' | 'config'>('dashboard');
@@ -188,16 +200,16 @@ const Admin = () => {
         {activeTab === 'dashboard' && (
            <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-[#1F2937] p-3 rounded-xl border border-gray-700">
-                 <p className="text-[10px] text-gray-400 uppercase">Faturamento</p>
-                 <p className="text-lg font-bold text-green-400">R$ 0.00</p>
+                 <p className="text-[10px] text-gray-400 uppercase">Hoje</p>
+                 <p className="text-lg font-bold text-green-400">{formatCurrency(revenueToday)}</p>
               </div>
               <div className="bg-[#1F2937] p-3 rounded-xl border border-gray-700 text-center">
                  <p className="text-[10px] text-gray-400 uppercase">Ativos</p>
-                 <p className="text-lg font-bold text-blue-400">0</p>
+                 <p className="text-lg font-bold text-blue-400">{activeOrders.length}</p>
               </div>
               <div className="bg-[#1F2937] p-3 rounded-xl border border-gray-700 text-center">
                  <p className="text-[10px] text-gray-400 uppercase">Total</p>
-                 <p className="text-lg font-bold text-white">0</p>
+                 <p className="text-lg font-bold text-white">{orders.length}</p>
               </div>
            </div>
         )}
@@ -217,8 +229,79 @@ const Admin = () => {
         
         {/* TAB: DASHBOARD */}
         {activeTab === 'dashboard' && (
-          <div className="text-center text-gray-500 mt-10">
-            <p>Selecione uma opção acima para gerenciar.</p>
+          <div className="space-y-4">
+            {/* Pedidos pendentes em destaque */}
+            {pendingOrders.length > 0 && (
+              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-4 animate-pulse-once">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">🔔</span>
+                  <div>
+                    <p className="font-black text-yellow-800">{pendingOrders.length} pedido{pendingOrders.length > 1 ? 's' : ''} aguardando!</p>
+                    <p className="text-xs text-yellow-600">Clique em "Pedidos" para aceitar</p>
+                  </div>
+                  <button onClick={() => setActiveTab('orders')} className="ml-auto bg-yellow-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-yellow-600">Ver agora</button>
+                </div>
+              </div>
+            )}
+
+            {/* Resumo do dia */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+              <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">📊 Resumo de Hoje</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-green-50 rounded-xl p-3 border border-green-100">
+                  <p className="text-xs text-green-600 font-bold uppercase">Faturamento</p>
+                  <p className="text-xl font-black text-green-700">{formatCurrency(revenueToday)}</p>
+                  <p className="text-[10px] text-green-500">{completedToday.length} pedido{completedToday.length !== 1 ? 's' : ''} concluído{completedToday.length !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                  <p className="text-xs text-blue-600 font-bold uppercase">Em Andamento</p>
+                  <p className="text-xl font-black text-blue-700">{activeOrders.length}</p>
+                  <p className="text-[10px] text-blue-500">{pendingOrders.length} aguardando resposta</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Últimos pedidos */}
+            {orders.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                <h3 className="font-bold text-gray-800 mb-3">🕐 Últimos Pedidos</h3>
+                <div className="space-y-2">
+                  {orders.slice(0, 5).map(order => (
+                    <div key={order.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                      <div>
+                        <p className="font-bold text-sm text-gray-800">#{order.id.slice(-4).toUpperCase()} · {order.customerName}</p>
+                        <p className="text-xs text-gray-400">{order.items.length} iten{order.items.length !== 1 ? 's' : ''}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-sm text-gray-700">{formatCurrency(order.total)}</p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                          ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            order.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            'bg-blue-100 text-blue-700'}`}>
+                          {order.status === 'pending' ? 'Pendente' :
+                           order.status === 'completed' ? 'Concluído' :
+                           order.status === 'preparing' ? 'Preparando' :
+                           order.status === 'delivering' ? 'Em Entrega' : order.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {orders.length > 5 && (
+                  <button onClick={() => setActiveTab('orders')} className="w-full text-center text-xs text-primary font-bold mt-3 py-2 hover:underline">
+                    Ver todos os {orders.length} pedidos →
+                  </button>
+                )}
+              </div>
+            )}
+
+            {orders.length === 0 && (
+              <div className="text-center py-16">
+                <p className="text-4xl mb-3">🍱</p>
+                <p className="text-gray-500 font-medium">Nenhum pedido ainda.</p>
+                <p className="text-xs text-gray-400 mt-1">Os pedidos aparecerão aqui em tempo real.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -226,87 +309,215 @@ const Admin = () => {
         {activeTab === 'orders' && (
           <div className="space-y-4">
             {orders.length === 0 ? (
-                <div className="text-center py-10">
-                    <p className="text-gray-400">Sem pedidos recentes.</p>
+                <div className="text-center py-16">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <ListOrdered size={28} className="text-gray-300" />
+                    </div>
+                    <p className="text-gray-400 font-medium">Sem pedidos recentes.</p>
+                    <p className="text-xs text-gray-300 mt-1">Os pedidos aparecerão aqui em tempo real.</p>
                 </div>
             ) : (
-                orders.map(order => (
-                    <div key={order.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <div className="flex justify-between items-start mb-3">
-                            <div>
-                                <h3 className="font-bold text-gray-800 text-lg">#{order.id.slice(-4)}</h3>
-                                <p className="text-sm text-gray-500">{order.customerName}</p>
-                                <p className="text-xs text-gray-400">{order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString() : 'Data inválida'}</p>
-                            </div>
-                            <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide 
-                                ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-600' : 
-                                  order.status === 'accepted' ? 'bg-blue-100 text-blue-600' :
-                                  order.status === 'preparing' ? 'bg-orange-100 text-orange-600' :
-                                  order.status === 'delivering' ? 'bg-purple-100 text-purple-600' :
-                                  order.status === 'completed' ? 'bg-green-100 text-green-600' :
-                                  'bg-red-100 text-red-600'}`}>
-                                {order.status === 'pending' ? 'Pendente' :
-                                 order.status === 'accepted' ? 'Aceito' :
-                                 order.status === 'preparing' ? 'Preparando' :
-                                 order.status === 'delivering' ? 'Em Entrega' :
-                                 order.status === 'completed' ? 'Concluído' : 'Cancelado'}
-                            </div>
-                        </div>
+                orders.map(order => {
+                    // Helper: calcula o preço real de um item levando em conta selectedOptions
+                    const calcItemTotal = (item: typeof order.items[0]) => {
+                        let hasSizeSelected = false;
+                        let optionsTotal = 0;
+                        const parsedGroups = typeof (item.optionGroups as any) === 'string'
+                            ? (() => { try { return JSON.parse(item.optionGroups as any); } catch { return []; } })()
+                            : (item.optionGroups || []);
 
-                        <div className="border-t border-b border-gray-50 py-3 my-3 space-y-2">
-                            {order.items.map((item, idx) => (
-                                <div key={idx} className="flex justify-between text-sm">
-                                    <span className="text-gray-600"><span className="font-bold text-gray-800">{item.quantity}x</span> {item.name}</span>
-                                    <span className="text-gray-500">{formatCurrency(item.price * item.quantity)}</span>
+                        Object.entries(item.selectedOptions || {}).forEach(([groupId, groupOptions]) => {
+                            const group = (parsedGroups as any[]).find((g: any) => String(g.id) === String(groupId));
+                            const isSize = group && Number(group.max) === 1 && (group.required === true || String(group.required) === 'true');
+                            (groupOptions as any[]).forEach((opt: any) => {
+                                if (isSize) hasSizeSelected = true;
+                                optionsTotal += Number(opt.price) || 0;
+                            });
+                        });
+                        const base = hasSizeSelected ? 0 : (Number(item.price) || 0);
+                        return (base + optionsTotal) * item.quantity;
+                    };
+
+                    // Helper: lista os acréscimos de um item
+                    const getItemAddons = (item: typeof order.items[0]) => {
+                        const addons: { name: string; price: number }[] = [];
+                        Object.entries(item.selectedOptions || {}).forEach(([, groupOptions]) => {
+                            (groupOptions as any[]).forEach((opt: any) => {
+                                addons.push({ name: opt.name, price: Number(opt.price) || 0 });
+                            });
+                        });
+                        return addons;
+                    };
+
+                    const subtotal = order.items.reduce((acc, item) => acc + calcItemTotal(item), 0);
+
+                    return (
+                    <div key={order.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                        {/* Header colorido por status */}
+                        <div className={`px-4 py-3 flex justify-between items-center
+                            ${order.status === 'pending' ? 'bg-yellow-50 border-b border-yellow-100' :
+                              order.status === 'accepted' ? 'bg-blue-50 border-b border-blue-100' :
+                              order.status === 'preparing' ? 'bg-orange-50 border-b border-orange-100' :
+                              order.status === 'delivering' ? 'bg-purple-50 border-b border-purple-100' :
+                              order.status === 'completed' ? 'bg-green-50 border-b border-green-100' :
+                              'bg-red-50 border-b border-red-100'}`}>
+                            <div className="flex items-center gap-3">
+                                <div>
+                                    <h3 className="font-black text-gray-800 text-base leading-tight">#{order.id.slice(-4).toUpperCase()}</h3>
+                                    <p className="text-xs text-gray-500 font-medium">{order.customerName}</p>
                                 </div>
-                            ))}
-                            {order.deliveryFee > 0 && (
-                                <div className="flex justify-between text-sm text-gray-500 pt-1">
-                                    <span>Taxa de Entrega</span>
-                                    <span>{formatCurrency(order.deliveryFee)}</span>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                                <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide
+                                    ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                      order.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
+                                      order.status === 'preparing' ? 'bg-orange-100 text-orange-700' :
+                                      order.status === 'delivering' ? 'bg-purple-100 text-purple-700' :
+                                      order.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                      'bg-red-100 text-red-700'}`}>
+                                    {order.status === 'pending' ? '⏳ Pendente' :
+                                     order.status === 'accepted' ? '✅ Aceito' :
+                                     order.status === 'preparing' ? '👨‍🍳 Preparando' :
+                                     order.status === 'delivering' ? '🛵 Em Entrega' :
+                                     order.status === 'completed' ? '🎉 Concluído' : '❌ Cancelado'}
                                 </div>
-                            )}
-                        </div>
-
-                        <div className="flex justify-between items-center mb-4">
-                            <div>
-                                <p className="text-xs text-gray-400 uppercase font-bold">Total</p>
-                                <p className="text-xl font-bold text-gray-800">{formatCurrency(order.total)}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-gray-400 uppercase font-bold">Pagamento</p>
-                                <p className="text-sm font-medium text-gray-700">{order.paymentMethod} {order.changeFor && `(Troco p/ ${order.changeFor})`}</p>
+                                <p className="text-[10px] text-gray-400">{order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString('pt-BR') : typeof order.createdAt === 'string' ? new Date(order.createdAt).toLocaleString('pt-BR') : 'Data inválida'}</p>
                             </div>
                         </div>
 
-                        <div className="bg-gray-50 p-3 rounded-xl mb-4 text-sm text-gray-600">
-                            <p><span className="font-bold">Endereço:</span> {order.address}, {order.number} - {order.neighborhood}</p>
-                            {order.notes && <p className="mt-1"><span className="font-bold">Obs:</span> {order.notes}</p>}
-                            {order.needCutlery && <p className="mt-1"><span className="font-bold">Talheres:</span> {order.needCutlery}</p>}
-                        </div>
+                        <div className="p-4">
+                            {/* Itens do pedido com acréscimos */}
+                            <div className="space-y-3 mb-3">
+                                {order.items.map((item, idx) => {
+                                    const addons = getItemAddons(item);
+                                    const itemTotal = calcItemTotal(item);
+                                    return (
+                                        <div key={idx} className="bg-gray-50 rounded-xl p-3">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                    <span className="text-sm font-bold text-gray-800">
+                                                        {item.quantity}× {item.name}
+                                                    </span>
+                                                    {/* Acréscimos / opções selecionadas */}
+                                                    {addons.length > 0 && (
+                                                        <div className="mt-1 space-y-0.5">
+                                                            {addons.map((addon, ai) => (
+                                                                <div key={ai} className="flex items-center justify-between text-xs text-gray-500">
+                                                                    <span className="flex items-center gap-1">
+                                                                        <span className="text-primary font-bold">+</span>
+                                                                        {addon.name}
+                                                                    </span>
+                                                                    {addon.price > 0 && (
+                                                                        <span className="text-gray-400 font-medium">{formatCurrency(addon.price)}</span>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span className="text-sm font-bold text-gray-700 ml-3 shrink-0">{formatCurrency(itemTotal)}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                            {order.status === 'pending' && (
-                                <>
-                                    <button onClick={() => updateOrderStatus(order.id, 'cancelled')} className="bg-red-50 text-red-500 py-2 rounded-lg font-bold text-sm hover:bg-red-100">Recusar</button>
-                                    <button onClick={() => updateOrderStatus(order.id, 'accepted')} className="bg-green-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-green-600 shadow-sm">Aceitar Pedido</button>
-                                </>
-                            )}
-                            {order.status === 'accepted' && (
-                                <button onClick={() => updateOrderStatus(order.id, 'preparing')} className="col-span-2 bg-orange-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-orange-600 shadow-sm">Iniciar Preparo</button>
-                            )}
-                            {order.status === 'preparing' && (
-                                <button onClick={() => updateOrderStatus(order.id, 'delivering')} className="col-span-2 bg-purple-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-purple-600 shadow-sm">Saiu para Entrega</button>
-                            )}
-                            {order.status === 'delivering' && (
-                                <button onClick={() => updateOrderStatus(order.id, 'completed')} className="col-span-2 bg-green-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-green-700 shadow-sm">Finalizar Pedido</button>
-                            )}
-                             {(order.status === 'completed' || order.status === 'cancelled') && (
-                                <div className="col-span-2 text-center text-xs text-gray-400 py-2">Pedido Arquivado</div>
-                            )}
+                            {/* Resumo financeiro */}
+                            <div className="border-t border-gray-100 pt-3 space-y-1.5">
+                                <div className="flex justify-between text-sm text-gray-500">
+                                    <span>Subtotal</span>
+                                    <span>{formatCurrency(subtotal)}</span>
+                                </div>
+                                {order.deliveryFee > 0 ? (
+                                    <div className="flex justify-between text-sm text-gray-500">
+                                        <span>🛵 Taxa de Entrega</span>
+                                        <span>{formatCurrency(order.deliveryFee)}</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex justify-between text-sm text-green-600">
+                                        <span>🛵 Taxa de Entrega</span>
+                                        <span className="font-bold">GRÁTIS</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                                    <span className="font-bold text-gray-800">TOTAL</span>
+                                    <span className="text-xl font-black text-gray-900">{formatCurrency(order.total)}</span>
+                                </div>
+                            </div>
+
+                            {/* Pagamento e endereço */}
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                                <div className="bg-gray-50 rounded-xl p-3">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Pagamento</p>
+                                    <p className="text-sm font-bold text-gray-700">
+                                        {order.paymentMethod === 'Pix' ? '💸 Pix' :
+                                         order.paymentMethod === 'Cartão' ? '💳 Cartão' : '💵 Dinheiro'}
+                                    </p>
+                                    {order.changeFor && (
+                                        <p className="text-xs text-gray-400 mt-0.5">Troco p/ {order.changeFor}</p>
+                                    )}
+                                </div>
+                                <div className="bg-gray-50 rounded-xl p-3">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Talheres</p>
+                                    <p className="text-sm font-bold text-gray-700">{order.needCutlery || '—'}</p>
+                                </div>
+                            </div>
+
+                            {/* Endereço */}
+                            <div className="mt-2 bg-gray-50 p-3 rounded-xl text-sm text-gray-600">
+                                <p className="flex items-start gap-1.5">
+                                    <span className="text-base shrink-0">📍</span>
+                                    <span><span className="font-bold">{order.address}, {order.number}</span> — {order.neighborhood}</span>
+                                </p>
+                                {order.notes && (
+                                    <p className="flex items-start gap-1.5 mt-1.5 text-orange-700 bg-orange-50 rounded-lg p-2 border border-orange-100">
+                                        <span className="shrink-0">📝</span>
+                                        <span><span className="font-bold">Obs:</span> {order.notes}</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* WhatsApp + Ações */}
+                            <div className="mt-3 space-y-2">
+                                {/* Botão WhatsApp do cliente */}
+                                {order.customerName && (
+                                    <a
+                                        href={`https://wa.me/${restaurantInfo.whatsappNumber}?text=${encodeURIComponent(`Olá ${order.customerName}! Seu pedido #${order.id.slice(-4).toUpperCase()} está sendo preparado. 🍱`)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity"
+                                    >
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-4 h-4 filter brightness-0 invert" alt="" />
+                                        Chamar Cliente no WhatsApp
+                                    </a>
+                                )}
+
+                                {/* Ações de status */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    {order.status === 'pending' && (
+                                        <>
+                                            <button onClick={() => updateOrderStatus(order.id, 'cancelled')} className="bg-red-50 text-red-500 py-2.5 rounded-xl font-bold text-sm hover:bg-red-100 transition-colors">✕ Recusar</button>
+                                            <button onClick={() => updateOrderStatus(order.id, 'accepted')} className="bg-green-500 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-green-600 shadow-sm transition-colors">✓ Aceitar</button>
+                                        </>
+                                    )}
+                                    {order.status === 'accepted' && (
+                                        <button onClick={() => updateOrderStatus(order.id, 'preparing')} className="col-span-2 bg-orange-500 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-orange-600 shadow-sm transition-colors">👨‍🍳 Iniciar Preparo</button>
+                                    )}
+                                    {order.status === 'preparing' && (
+                                        <button onClick={() => updateOrderStatus(order.id, 'delivering')} className="col-span-2 bg-purple-500 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-purple-600 shadow-sm transition-colors">🛵 Saiu para Entrega</button>
+                                    )}
+                                    {order.status === 'delivering' && (
+                                        <button onClick={() => updateOrderStatus(order.id, 'completed')} className="col-span-2 bg-green-600 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-green-700 shadow-sm transition-colors">🎉 Finalizar Pedido</button>
+                                    )}
+                                    {(order.status === 'completed' || order.status === 'cancelled') && (
+                                        <div className="col-span-2 text-center text-xs text-gray-400 py-2">Pedido Arquivado</div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
-                ))
+                    );
+                })
             )}
           </div>
         )}
